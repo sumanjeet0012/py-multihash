@@ -194,6 +194,29 @@ class Multihash(namedtuple("Multihash", "code,name,length,digest")):
             raise ValueError(f"Failed to serialize to JSON: {e}") from e
 
 
+    @classmethod
+    def create_digest(cls, data, func, length=None):
+        """Hash the given data and return a Multihash instance.
+
+        This is a convenience class method that combines hashing and Multihash
+        creation in one step. Named create_digest to avoid conflict with the
+        digest field.
+
+        Args:
+            data: The data to hash (bytes)
+            func: The hash function to use (Func enum, str, or int)
+            length: Optional truncation length for the digest
+
+        Returns:
+            Multihash: A new Multihash instance with the computed digest
+
+        Example:
+            >>> mh = Multihash.create_digest(b'hello', Func.sha2_256)
+            >>> mh.encode('hex')
+        """
+        return digest(data, func, length)
+
+
 class MultihashSet:
     """A specialized collection for managing unique Multihash values.
 
