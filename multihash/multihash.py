@@ -19,19 +19,18 @@ from multihash.funcs import Func, FuncReg, _is_app_specific_func
 from . import base58
 
 
-def _resolve_shake_length(func: Func | int, length: int | None) -> int:
-    """Resolve SHAKE hash output length.
+def _resolve_variable_length(func: Func | int, length: int | None) -> int:
+    """Resolve output length for a variable-size hash function.
 
     Args:
-        func: SHAKE function (shake_128 or shake_256)
+        func: Variable-size hash function code
         length: Requested length (None or -1 for default)
 
     Returns:
         Resolved length in bytes
     """
     if length is None or length == -1:
-        # Default length for SHAKE-128 is 32, SHAKE-256 is 64
-        return 32 if func == Func.shake_128 else 64
+        return FuncReg.default_lengths[int(func)]
     return length
 
 
@@ -301,6 +300,60 @@ class Multihash(namedtuple("Multihash", "code,name,length,digest")):
             raise OSError(f"Failed to write multihash to stream: {e}") from e
 
 
+class MultihashReader:
+    """Wraps a binary stream with ReadMultihash capability (go-multihash NewReader)."""
+
+    def __init__(self, stream: BinaryIO):
+        self._stream = stream
+
+    def read(self, size: int = -1) -> bytes:
+        """Read raw bytes from the underlying stream."""
+        return self._stream.read(size)
+
+    def ReadMultihash(self) -> Multihash:
+        """Read one multihash from the stream (Go-style API)."""
+        return Multihash.read(self._stream)
+
+    def read_multihash(self) -> Multihash:
+        """Read one multihash from the stream (Python-style API)."""
+        return self.ReadMultihash()
+
+
+class MultihashWriter:
+    """Wraps a binary stream with WriteMultihash capability (go-multihash NewWriter)."""
+
+    def __init__(self, stream: BinaryIO):
+        self._stream = stream
+
+    def write(self, buf: bytes) -> int:
+        """Write raw bytes to the underlying stream."""
+        return self._stream.write(buf)
+
+    def WriteMultihash(self, mh: Multihash) -> int:
+        """Write one multihash to the stream (Go-style API)."""
+        if not isinstance(mh, Multihash):
+            raise TypeError(f"expected Multihash, got {type(mh)}")
+        return mh.write(self._stream)
+
+    def write_multihash(self, mh: Multihash) -> int:
+        """Write one multihash to the stream (Python-style API)."""
+        return self.WriteMultihash(mh)
+
+
+def new_reader(stream: BinaryIO) -> MultihashReader:
+    """Create a :class:`MultihashReader` wrapping ``stream``."""
+    return MultihashReader(stream)
+
+
+def new_writer(stream: BinaryIO) -> MultihashWriter:
+    """Create a :class:`MultihashWriter` wrapping ``stream``."""
+    return MultihashWriter(stream)
+
+
+NewReader = new_reader
+NewWriter = new_writer
+
+
 class MultihashSet:
     """A specialized collection for managing unique Multihash values.
 
@@ -424,6 +477,49 @@ class MultihashSet:
             List of all Multihash objects in the set
         """
         return list(self._set)
+
+    def Visit(self, mh: Multihash) -> bool:
+        """Add mh if not present. Return True if it was added (Go-style API).
+
+        Args:
+            mh: Multihash object to visit/add
+
+        Returns:
+            True if mh was newly added, False if it was already present
+
+        Raises:
+            TypeError: If mh is not a Multihash object
+        """
+        if not isinstance(mh, Multihash):
+            raise TypeError(f"MultihashSet can only contain Multihash objects, got {type(mh)}")
+        if mh in self._set:
+            return False
+        self._set.add(mh)
+        return True
+
+    def visit(self, mh: Multihash) -> bool:
+        """Add mh if not present. Return True if it was added (Python-style API)."""
+        return self.Visit(mh)
+
+    def ForEach(self, func):
+        """Call ``func(mh)`` for each Multihash. Stop and return the error if raised.
+
+        Args:
+            func: Callable invoked with each Multihash in the set
+
+        Returns:
+            ``None`` on success, or the exception instance if ``func`` raises
+        """
+        for mh in self._set:
+            try:
+                func(mh)
+            except Exception as e:
+                return e
+        return None
+
+    def for_each(self, func):
+        """Call ``func(mh)`` for each Multihash (Python-style API)."""
+        return self.ForEach(func)
 
     def __len__(self) -> int:
         """Return the number of Multihash objects in the set.
@@ -572,12 +668,12 @@ def _do_digest(data, func, length: int | None = None):
         TruncationError: If truncation length is invalid
     """
     func = FuncReg.get(func)
-    is_shake = func in (Func.shake_128, Func.shake_256)
+    is_variable = FuncReg.is_variable_size(func)
 
-    # Handle SHAKE functions which require length
-    if is_shake:
-        shake_length = _resolve_shake_length(func, length)
-        hash_obj = FuncReg.hash_from_func(func, length=shake_length)
+    # Handle variable-size functions which require a length hint
+    if is_variable:
+        resolved_length = _resolve_variable_length(func, length)
+        hash_obj = FuncReg.hash_from_func(func, length=resolved_length)
     else:
         hash_obj = FuncReg.hash_from_func(func)
 
@@ -587,12 +683,17 @@ def _do_digest(data, func, length: int | None = None):
     hash_obj.update(data)
     digest_bytes = bytes(hash_obj.digest())
 
-    # Handle truncation (but not for SHAKE, as they already produce the right length)
-    if not is_shake and length is not None and length != -1:
+    # Handle truncation (but not for variable-size digests that already match length)
+    if not is_variable and length is not None and length != -1:
         if length < 0:
             raise TruncationError(f"truncation length must be non-negative, got {length}")
         if length == 0:
             raise TruncationError("truncation length cannot be zero")
+        if func == Func.identity and length != len(digest_bytes):
+            raise TruncationError(
+                f"the length of the identity hash ({length}) must be equal "
+                f"to the length of the data ({len(digest_bytes)})"
+            )
         if length > len(digest_bytes):
             raise TruncationError(f"truncation length {length} exceeds digest size {len(digest_bytes)}")
         digest_bytes = digest_bytes[:length]
@@ -750,7 +851,7 @@ def decode(multihash):
     :raises ValueError: if the length is not same as the digest
     """
     if not isinstance(multihash, bytes):
-        raise TypeError("multihash should be bytes, not {}", type(multihash))
+        raise TypeError(f"multihash should be bytes, not {type(multihash)}")
 
     if len(multihash) < 3:
         raise ValueError("multihash must be greater than 3 bytes.")
@@ -775,6 +876,53 @@ def decode(multihash):
         raise ValueError(f"Inconsistent multihash length {len(buf)} != {length}")
 
     return Multihash(code=code, name=constants.CODE_HASHES.get(code, code), length=length, digest=buf)
+
+
+def cast(buf: bytes) -> Multihash:
+    """Validate ``buf`` as a multihash and return a :class:`Multihash`.
+
+    This is the Python equivalent of go-multihash ``Cast``: the entire buffer
+    must be a valid multihash (no trailing data).
+
+    Args:
+        buf: Raw multihash bytes
+
+    Returns:
+        Multihash: Decoded multihash
+
+    Raises:
+        TypeError: If ``buf`` is not bytes
+        ValueError: If ``buf`` is not a valid multihash
+    """
+    return decode(buf)
+
+
+Cast = cast
+
+
+def mh_from_bytes(buf: bytes) -> tuple[int, Multihash]:
+    """Read a multihash from the start of ``buf``, allowing trailing data.
+
+    This is the Python equivalent of go-multihash ``MHFromBytes``.
+
+    Args:
+        buf: Buffer that begins with a multihash (may contain trailing bytes)
+
+    Returns:
+        Tuple of ``(bytes_consumed, Multihash)``
+
+    Raises:
+        TypeError: If ``buf`` is not bytes
+        ValueError: If the leading bytes are not a valid multihash
+    """
+    if not isinstance(buf, bytes):
+        raise TypeError(f"buf should be bytes, not {type(buf)}")
+    stream = BytesIO(buf)
+    mh = Multihash.read(stream)
+    return stream.tell(), mh
+
+
+MHFromBytes = mh_from_bytes
 
 
 def encode(digest, code, length=None):
@@ -908,12 +1056,12 @@ def sum_stream(
         raise ValueError(f"chunk_size must be positive, got {chunk_size}")
 
     func = FuncReg.get(code)
-    is_shake = func in (Func.shake_128, Func.shake_256)
+    is_variable = FuncReg.is_variable_size(func)
 
-    # Handle SHAKE functions which require length
-    if is_shake:
-        shake_length = _resolve_shake_length(func, length)
-        hash_obj = FuncReg.hash_from_func(func, length=shake_length)
+    # Handle variable-size functions which require a length hint
+    if is_variable:
+        resolved_length = _resolve_variable_length(func, length)
+        hash_obj = FuncReg.hash_from_func(func, length=resolved_length)
     else:
         hash_obj = FuncReg.hash_from_func(func)
 
@@ -929,12 +1077,17 @@ def sum_stream(
 
     digest_bytes = bytes(hash_obj.digest())
 
-    # Handle truncation (but not for SHAKE, as they already produce the right length)
-    if not is_shake and length is not None and length != -1:
+    # Handle truncation (but not for variable-size digests that already match length)
+    if not is_variable and length is not None and length != -1:
         if length < 0:
             raise TruncationError(f"truncation length must be non-negative, got {length}")
         if length == 0:
             raise TruncationError("truncation length cannot be zero")
+        if func == Func.identity and length != len(digest_bytes):
+            raise TruncationError(
+                f"the length of the identity hash ({length}) must be equal "
+                f"to the length of the data ({len(digest_bytes)})"
+            )
         if length > len(digest_bytes):
             raise TruncationError(f"truncation length {length} exceeds digest size {len(digest_bytes)}")
         digest_bytes = digest_bytes[:length]

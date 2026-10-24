@@ -19,9 +19,10 @@ registered/unregistered at runtime.
 
 import hashlib
 from collections import namedtuple
+from collections.abc import Callable
 from enum import IntEnum
 from numbers import Integral
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import blake3
 import mmh3
@@ -44,7 +45,9 @@ class Func(IntEnum):
     True
     """
 
-    # Blake2 variants (sorted alphabetically)
+    # Standard multihash functions, sorted by name
+    bcrypt_pbkdf = HASH_CODES["bcrypt-pbkdf"]  # 0xD00D
+    bittorrent_pieces_root = HASH_CODES["bittorrent-pieces-root"]  # 0xB702
     blake2b_8 = HASH_CODES["blake2b-8"]  # 0xB201
     blake2b_16 = HASH_CODES["blake2b-16"]  # 0xB202
     blake2b_24 = HASH_CODES["blake2b-24"]  # 0xB203
@@ -143,15 +146,21 @@ class Func(IntEnum):
     blake2s_256 = HASH_CODES["blake2s-256"]  # 0xB260
     blake3 = HASH_CODES["blake3"]  # 0x1E
     dbl_sha2_256 = HASH_CODES["dbl-sha2-256"]  # 0x56
-    identity = HASH_CODES["id"]  # 0x00
+    ed2k = HASH_CODES["ed2k"]  # 0xED20
+    fr32_sha256_trunc254_padbintree = HASH_CODES["fr32-sha256-trunc254-padbintree"]  # 0x1011
+    identity = HASH_CODES["identity"]  # 0x00
     keccak_224 = HASH_CODES["keccak-224"]  # 0x1A
     keccak_256 = HASH_CODES["keccak-256"]  # 0x1B
     keccak_384 = HASH_CODES["keccak-384"]  # 0x1C
     keccak_512 = HASH_CODES["keccak-512"]  # 0x1D
+    kt_128 = HASH_CODES["kt-128"]  # 0x1D01
+    kt_256 = HASH_CODES["kt-256"]  # 0x1D02
     md4 = HASH_CODES["md4"]  # 0xD4
     md5 = HASH_CODES["md5"]  # 0xD5
-    murmur3_128 = HASH_CODES["murmur3-128"]  # 0x22
     murmur3_32 = HASH_CODES["murmur3-32"]  # 0x23
+    murmur3_128 = HASH_CODES["murmur3-128"]  # 0x22
+    poseidon_bls12_381_a2_fc1 = HASH_CODES["poseidon-bls12_381-a2-fc1"]  # 0xB401
+    poseidon_bls12_381_a2_fc1_sc = HASH_CODES["poseidon-bls12_381-a2-fc1-sc"]  # 0xB402
     ripemd_128 = HASH_CODES["ripemd-128"]  # 0x1052
     ripemd_160 = HASH_CODES["ripemd-160"]  # 0x1053
     ripemd_256 = HASH_CODES["ripemd-256"]  # 0x1054
@@ -159,6 +168,7 @@ class Func(IntEnum):
     sha1 = HASH_CODES["sha1"]  # 0x11
     sha2_224 = HASH_CODES["sha2-224"]  # 0x1013
     sha2_256 = HASH_CODES["sha2-256"]  # 0x12
+    sha2_256_chunked = HASH_CODES["sha2-256-chunked"]  # 0xB510
     sha2_256_trunc254_padded = HASH_CODES["sha2-256-trunc254-padded"]  # 0x1012
     sha2_384 = HASH_CODES["sha2-384"]  # 0x20
     sha2_512 = HASH_CODES["sha2-512"]  # 0x13
@@ -170,6 +180,233 @@ class Func(IntEnum):
     sha3_512 = HASH_CODES["sha3-512"]  # 0x14
     shake_128 = HASH_CODES["shake-128"]  # 0x18
     shake_256 = HASH_CODES["shake-256"]  # 0x19
+    skein256_8 = HASH_CODES["skein256-8"]  # 0xB301
+    skein256_16 = HASH_CODES["skein256-16"]  # 0xB302
+    skein256_24 = HASH_CODES["skein256-24"]  # 0xB303
+    skein256_32 = HASH_CODES["skein256-32"]  # 0xB304
+    skein256_40 = HASH_CODES["skein256-40"]  # 0xB305
+    skein256_48 = HASH_CODES["skein256-48"]  # 0xB306
+    skein256_56 = HASH_CODES["skein256-56"]  # 0xB307
+    skein256_64 = HASH_CODES["skein256-64"]  # 0xB308
+    skein256_72 = HASH_CODES["skein256-72"]  # 0xB309
+    skein256_80 = HASH_CODES["skein256-80"]  # 0xB30A
+    skein256_88 = HASH_CODES["skein256-88"]  # 0xB30B
+    skein256_96 = HASH_CODES["skein256-96"]  # 0xB30C
+    skein256_104 = HASH_CODES["skein256-104"]  # 0xB30D
+    skein256_112 = HASH_CODES["skein256-112"]  # 0xB30E
+    skein256_120 = HASH_CODES["skein256-120"]  # 0xB30F
+    skein256_128 = HASH_CODES["skein256-128"]  # 0xB310
+    skein256_136 = HASH_CODES["skein256-136"]  # 0xB311
+    skein256_144 = HASH_CODES["skein256-144"]  # 0xB312
+    skein256_152 = HASH_CODES["skein256-152"]  # 0xB313
+    skein256_160 = HASH_CODES["skein256-160"]  # 0xB314
+    skein256_168 = HASH_CODES["skein256-168"]  # 0xB315
+    skein256_176 = HASH_CODES["skein256-176"]  # 0xB316
+    skein256_184 = HASH_CODES["skein256-184"]  # 0xB317
+    skein256_192 = HASH_CODES["skein256-192"]  # 0xB318
+    skein256_200 = HASH_CODES["skein256-200"]  # 0xB319
+    skein256_208 = HASH_CODES["skein256-208"]  # 0xB31A
+    skein256_216 = HASH_CODES["skein256-216"]  # 0xB31B
+    skein256_224 = HASH_CODES["skein256-224"]  # 0xB31C
+    skein256_232 = HASH_CODES["skein256-232"]  # 0xB31D
+    skein256_240 = HASH_CODES["skein256-240"]  # 0xB31E
+    skein256_248 = HASH_CODES["skein256-248"]  # 0xB31F
+    skein256_256 = HASH_CODES["skein256-256"]  # 0xB320
+    skein512_8 = HASH_CODES["skein512-8"]  # 0xB321
+    skein512_16 = HASH_CODES["skein512-16"]  # 0xB322
+    skein512_24 = HASH_CODES["skein512-24"]  # 0xB323
+    skein512_32 = HASH_CODES["skein512-32"]  # 0xB324
+    skein512_40 = HASH_CODES["skein512-40"]  # 0xB325
+    skein512_48 = HASH_CODES["skein512-48"]  # 0xB326
+    skein512_56 = HASH_CODES["skein512-56"]  # 0xB327
+    skein512_64 = HASH_CODES["skein512-64"]  # 0xB328
+    skein512_72 = HASH_CODES["skein512-72"]  # 0xB329
+    skein512_80 = HASH_CODES["skein512-80"]  # 0xB32A
+    skein512_88 = HASH_CODES["skein512-88"]  # 0xB32B
+    skein512_96 = HASH_CODES["skein512-96"]  # 0xB32C
+    skein512_104 = HASH_CODES["skein512-104"]  # 0xB32D
+    skein512_112 = HASH_CODES["skein512-112"]  # 0xB32E
+    skein512_120 = HASH_CODES["skein512-120"]  # 0xB32F
+    skein512_128 = HASH_CODES["skein512-128"]  # 0xB330
+    skein512_136 = HASH_CODES["skein512-136"]  # 0xB331
+    skein512_144 = HASH_CODES["skein512-144"]  # 0xB332
+    skein512_152 = HASH_CODES["skein512-152"]  # 0xB333
+    skein512_160 = HASH_CODES["skein512-160"]  # 0xB334
+    skein512_168 = HASH_CODES["skein512-168"]  # 0xB335
+    skein512_176 = HASH_CODES["skein512-176"]  # 0xB336
+    skein512_184 = HASH_CODES["skein512-184"]  # 0xB337
+    skein512_192 = HASH_CODES["skein512-192"]  # 0xB338
+    skein512_200 = HASH_CODES["skein512-200"]  # 0xB339
+    skein512_208 = HASH_CODES["skein512-208"]  # 0xB33A
+    skein512_216 = HASH_CODES["skein512-216"]  # 0xB33B
+    skein512_224 = HASH_CODES["skein512-224"]  # 0xB33C
+    skein512_232 = HASH_CODES["skein512-232"]  # 0xB33D
+    skein512_240 = HASH_CODES["skein512-240"]  # 0xB33E
+    skein512_248 = HASH_CODES["skein512-248"]  # 0xB33F
+    skein512_256 = HASH_CODES["skein512-256"]  # 0xB340
+    skein512_264 = HASH_CODES["skein512-264"]  # 0xB341
+    skein512_272 = HASH_CODES["skein512-272"]  # 0xB342
+    skein512_280 = HASH_CODES["skein512-280"]  # 0xB343
+    skein512_288 = HASH_CODES["skein512-288"]  # 0xB344
+    skein512_296 = HASH_CODES["skein512-296"]  # 0xB345
+    skein512_304 = HASH_CODES["skein512-304"]  # 0xB346
+    skein512_312 = HASH_CODES["skein512-312"]  # 0xB347
+    skein512_320 = HASH_CODES["skein512-320"]  # 0xB348
+    skein512_328 = HASH_CODES["skein512-328"]  # 0xB349
+    skein512_336 = HASH_CODES["skein512-336"]  # 0xB34A
+    skein512_344 = HASH_CODES["skein512-344"]  # 0xB34B
+    skein512_352 = HASH_CODES["skein512-352"]  # 0xB34C
+    skein512_360 = HASH_CODES["skein512-360"]  # 0xB34D
+    skein512_368 = HASH_CODES["skein512-368"]  # 0xB34E
+    skein512_376 = HASH_CODES["skein512-376"]  # 0xB34F
+    skein512_384 = HASH_CODES["skein512-384"]  # 0xB350
+    skein512_392 = HASH_CODES["skein512-392"]  # 0xB351
+    skein512_400 = HASH_CODES["skein512-400"]  # 0xB352
+    skein512_408 = HASH_CODES["skein512-408"]  # 0xB353
+    skein512_416 = HASH_CODES["skein512-416"]  # 0xB354
+    skein512_424 = HASH_CODES["skein512-424"]  # 0xB355
+    skein512_432 = HASH_CODES["skein512-432"]  # 0xB356
+    skein512_440 = HASH_CODES["skein512-440"]  # 0xB357
+    skein512_448 = HASH_CODES["skein512-448"]  # 0xB358
+    skein512_456 = HASH_CODES["skein512-456"]  # 0xB359
+    skein512_464 = HASH_CODES["skein512-464"]  # 0xB35A
+    skein512_472 = HASH_CODES["skein512-472"]  # 0xB35B
+    skein512_480 = HASH_CODES["skein512-480"]  # 0xB35C
+    skein512_488 = HASH_CODES["skein512-488"]  # 0xB35D
+    skein512_496 = HASH_CODES["skein512-496"]  # 0xB35E
+    skein512_504 = HASH_CODES["skein512-504"]  # 0xB35F
+    skein512_512 = HASH_CODES["skein512-512"]  # 0xB360
+    skein1024_8 = HASH_CODES["skein1024-8"]  # 0xB361
+    skein1024_16 = HASH_CODES["skein1024-16"]  # 0xB362
+    skein1024_24 = HASH_CODES["skein1024-24"]  # 0xB363
+    skein1024_32 = HASH_CODES["skein1024-32"]  # 0xB364
+    skein1024_40 = HASH_CODES["skein1024-40"]  # 0xB365
+    skein1024_48 = HASH_CODES["skein1024-48"]  # 0xB366
+    skein1024_56 = HASH_CODES["skein1024-56"]  # 0xB367
+    skein1024_64 = HASH_CODES["skein1024-64"]  # 0xB368
+    skein1024_72 = HASH_CODES["skein1024-72"]  # 0xB369
+    skein1024_80 = HASH_CODES["skein1024-80"]  # 0xB36A
+    skein1024_88 = HASH_CODES["skein1024-88"]  # 0xB36B
+    skein1024_96 = HASH_CODES["skein1024-96"]  # 0xB36C
+    skein1024_104 = HASH_CODES["skein1024-104"]  # 0xB36D
+    skein1024_112 = HASH_CODES["skein1024-112"]  # 0xB36E
+    skein1024_120 = HASH_CODES["skein1024-120"]  # 0xB36F
+    skein1024_128 = HASH_CODES["skein1024-128"]  # 0xB370
+    skein1024_136 = HASH_CODES["skein1024-136"]  # 0xB371
+    skein1024_144 = HASH_CODES["skein1024-144"]  # 0xB372
+    skein1024_152 = HASH_CODES["skein1024-152"]  # 0xB373
+    skein1024_160 = HASH_CODES["skein1024-160"]  # 0xB374
+    skein1024_168 = HASH_CODES["skein1024-168"]  # 0xB375
+    skein1024_176 = HASH_CODES["skein1024-176"]  # 0xB376
+    skein1024_184 = HASH_CODES["skein1024-184"]  # 0xB377
+    skein1024_192 = HASH_CODES["skein1024-192"]  # 0xB378
+    skein1024_200 = HASH_CODES["skein1024-200"]  # 0xB379
+    skein1024_208 = HASH_CODES["skein1024-208"]  # 0xB37A
+    skein1024_216 = HASH_CODES["skein1024-216"]  # 0xB37B
+    skein1024_224 = HASH_CODES["skein1024-224"]  # 0xB37C
+    skein1024_232 = HASH_CODES["skein1024-232"]  # 0xB37D
+    skein1024_240 = HASH_CODES["skein1024-240"]  # 0xB37E
+    skein1024_248 = HASH_CODES["skein1024-248"]  # 0xB37F
+    skein1024_256 = HASH_CODES["skein1024-256"]  # 0xB380
+    skein1024_264 = HASH_CODES["skein1024-264"]  # 0xB381
+    skein1024_272 = HASH_CODES["skein1024-272"]  # 0xB382
+    skein1024_280 = HASH_CODES["skein1024-280"]  # 0xB383
+    skein1024_288 = HASH_CODES["skein1024-288"]  # 0xB384
+    skein1024_296 = HASH_CODES["skein1024-296"]  # 0xB385
+    skein1024_304 = HASH_CODES["skein1024-304"]  # 0xB386
+    skein1024_312 = HASH_CODES["skein1024-312"]  # 0xB387
+    skein1024_320 = HASH_CODES["skein1024-320"]  # 0xB388
+    skein1024_328 = HASH_CODES["skein1024-328"]  # 0xB389
+    skein1024_336 = HASH_CODES["skein1024-336"]  # 0xB38A
+    skein1024_344 = HASH_CODES["skein1024-344"]  # 0xB38B
+    skein1024_352 = HASH_CODES["skein1024-352"]  # 0xB38C
+    skein1024_360 = HASH_CODES["skein1024-360"]  # 0xB38D
+    skein1024_368 = HASH_CODES["skein1024-368"]  # 0xB38E
+    skein1024_376 = HASH_CODES["skein1024-376"]  # 0xB38F
+    skein1024_384 = HASH_CODES["skein1024-384"]  # 0xB390
+    skein1024_392 = HASH_CODES["skein1024-392"]  # 0xB391
+    skein1024_400 = HASH_CODES["skein1024-400"]  # 0xB392
+    skein1024_408 = HASH_CODES["skein1024-408"]  # 0xB393
+    skein1024_416 = HASH_CODES["skein1024-416"]  # 0xB394
+    skein1024_424 = HASH_CODES["skein1024-424"]  # 0xB395
+    skein1024_432 = HASH_CODES["skein1024-432"]  # 0xB396
+    skein1024_440 = HASH_CODES["skein1024-440"]  # 0xB397
+    skein1024_448 = HASH_CODES["skein1024-448"]  # 0xB398
+    skein1024_456 = HASH_CODES["skein1024-456"]  # 0xB399
+    skein1024_464 = HASH_CODES["skein1024-464"]  # 0xB39A
+    skein1024_472 = HASH_CODES["skein1024-472"]  # 0xB39B
+    skein1024_480 = HASH_CODES["skein1024-480"]  # 0xB39C
+    skein1024_488 = HASH_CODES["skein1024-488"]  # 0xB39D
+    skein1024_496 = HASH_CODES["skein1024-496"]  # 0xB39E
+    skein1024_504 = HASH_CODES["skein1024-504"]  # 0xB39F
+    skein1024_512 = HASH_CODES["skein1024-512"]  # 0xB3A0
+    skein1024_520 = HASH_CODES["skein1024-520"]  # 0xB3A1
+    skein1024_528 = HASH_CODES["skein1024-528"]  # 0xB3A2
+    skein1024_536 = HASH_CODES["skein1024-536"]  # 0xB3A3
+    skein1024_544 = HASH_CODES["skein1024-544"]  # 0xB3A4
+    skein1024_552 = HASH_CODES["skein1024-552"]  # 0xB3A5
+    skein1024_560 = HASH_CODES["skein1024-560"]  # 0xB3A6
+    skein1024_568 = HASH_CODES["skein1024-568"]  # 0xB3A7
+    skein1024_576 = HASH_CODES["skein1024-576"]  # 0xB3A8
+    skein1024_584 = HASH_CODES["skein1024-584"]  # 0xB3A9
+    skein1024_592 = HASH_CODES["skein1024-592"]  # 0xB3AA
+    skein1024_600 = HASH_CODES["skein1024-600"]  # 0xB3AB
+    skein1024_608 = HASH_CODES["skein1024-608"]  # 0xB3AC
+    skein1024_616 = HASH_CODES["skein1024-616"]  # 0xB3AD
+    skein1024_624 = HASH_CODES["skein1024-624"]  # 0xB3AE
+    skein1024_632 = HASH_CODES["skein1024-632"]  # 0xB3AF
+    skein1024_640 = HASH_CODES["skein1024-640"]  # 0xB3B0
+    skein1024_648 = HASH_CODES["skein1024-648"]  # 0xB3B1
+    skein1024_656 = HASH_CODES["skein1024-656"]  # 0xB3B2
+    skein1024_664 = HASH_CODES["skein1024-664"]  # 0xB3B3
+    skein1024_672 = HASH_CODES["skein1024-672"]  # 0xB3B4
+    skein1024_680 = HASH_CODES["skein1024-680"]  # 0xB3B5
+    skein1024_688 = HASH_CODES["skein1024-688"]  # 0xB3B6
+    skein1024_696 = HASH_CODES["skein1024-696"]  # 0xB3B7
+    skein1024_704 = HASH_CODES["skein1024-704"]  # 0xB3B8
+    skein1024_712 = HASH_CODES["skein1024-712"]  # 0xB3B9
+    skein1024_720 = HASH_CODES["skein1024-720"]  # 0xB3BA
+    skein1024_728 = HASH_CODES["skein1024-728"]  # 0xB3BB
+    skein1024_736 = HASH_CODES["skein1024-736"]  # 0xB3BC
+    skein1024_744 = HASH_CODES["skein1024-744"]  # 0xB3BD
+    skein1024_752 = HASH_CODES["skein1024-752"]  # 0xB3BE
+    skein1024_760 = HASH_CODES["skein1024-760"]  # 0xB3BF
+    skein1024_768 = HASH_CODES["skein1024-768"]  # 0xB3C0
+    skein1024_776 = HASH_CODES["skein1024-776"]  # 0xB3C1
+    skein1024_784 = HASH_CODES["skein1024-784"]  # 0xB3C2
+    skein1024_792 = HASH_CODES["skein1024-792"]  # 0xB3C3
+    skein1024_800 = HASH_CODES["skein1024-800"]  # 0xB3C4
+    skein1024_808 = HASH_CODES["skein1024-808"]  # 0xB3C5
+    skein1024_816 = HASH_CODES["skein1024-816"]  # 0xB3C6
+    skein1024_824 = HASH_CODES["skein1024-824"]  # 0xB3C7
+    skein1024_832 = HASH_CODES["skein1024-832"]  # 0xB3C8
+    skein1024_840 = HASH_CODES["skein1024-840"]  # 0xB3C9
+    skein1024_848 = HASH_CODES["skein1024-848"]  # 0xB3CA
+    skein1024_856 = HASH_CODES["skein1024-856"]  # 0xB3CB
+    skein1024_864 = HASH_CODES["skein1024-864"]  # 0xB3CC
+    skein1024_872 = HASH_CODES["skein1024-872"]  # 0xB3CD
+    skein1024_880 = HASH_CODES["skein1024-880"]  # 0xB3CE
+    skein1024_888 = HASH_CODES["skein1024-888"]  # 0xB3CF
+    skein1024_896 = HASH_CODES["skein1024-896"]  # 0xB3D0
+    skein1024_904 = HASH_CODES["skein1024-904"]  # 0xB3D1
+    skein1024_912 = HASH_CODES["skein1024-912"]  # 0xB3D2
+    skein1024_920 = HASH_CODES["skein1024-920"]  # 0xB3D3
+    skein1024_928 = HASH_CODES["skein1024-928"]  # 0xB3D4
+    skein1024_936 = HASH_CODES["skein1024-936"]  # 0xB3D5
+    skein1024_944 = HASH_CODES["skein1024-944"]  # 0xB3D6
+    skein1024_952 = HASH_CODES["skein1024-952"]  # 0xB3D7
+    skein1024_960 = HASH_CODES["skein1024-960"]  # 0xB3D8
+    skein1024_968 = HASH_CODES["skein1024-968"]  # 0xB3D9
+    skein1024_976 = HASH_CODES["skein1024-976"]  # 0xB3DA
+    skein1024_984 = HASH_CODES["skein1024-984"]  # 0xB3DB
+    skein1024_992 = HASH_CODES["skein1024-992"]  # 0xB3DC
+    skein1024_1000 = HASH_CODES["skein1024-1000"]  # 0xB3DD
+    skein1024_1008 = HASH_CODES["skein1024-1008"]  # 0xB3DE
+    skein1024_1016 = HASH_CODES["skein1024-1016"]  # 0xB3DF
+    skein1024_1024 = HASH_CODES["skein1024-1024"]  # 0xB3E0
+    sm3_256 = HASH_CODES["sm3-256"]  # 0x534D
+    ssz_sha2_256_bmt = HASH_CODES["ssz-sha2-256-bmt"]  # 0xB502
+    x11 = HASH_CODES["x11"]  # 0x1100
 
 
 class IdentityHash:
@@ -228,6 +465,7 @@ class ShakeHash:
         self._shake_func = shake_func
         self._hasher = shake_func()
         self._length = length
+        self.digest_size = length
         self.name = self._hasher.name
 
     def update(self, data: bytes) -> None:
@@ -249,11 +487,46 @@ class ShakeHash:
         return c
 
 
+def _create_keccak_hash(digest_bits: int):
+    """Create a hashlib-compatible Keccak wrapper for the given digest bit length."""
+    try:
+        from Crypto.Hash import keccak as _keccak_mod
+    except ImportError:
+        return None
+
+    class KeccakHash:
+        name = f"keccak-{digest_bits}"
+        digest_size = digest_bits // 8
+        block_size = 200 - 2 * (digest_bits // 8)
+
+        def __init__(self) -> None:
+            self._digest_bits = digest_bits
+            self._data = bytearray()
+            self._hasher = _keccak_mod.new(digest_bits=digest_bits)
+
+        def update(self, data: bytes) -> None:
+            self._data.extend(data)
+            self._hasher.update(data)
+
+        def digest(self) -> bytes:
+            return self._hasher.digest()
+
+        def hexdigest(self) -> str:
+            return self._hasher.hexdigest()
+
+        def copy(self) -> "KeccakHash":
+            c = KeccakHash()
+            if self._data:
+                c.update(bytes(self._data))
+            return c
+
+    return KeccakHash
+
+
 class Blake3Hash:
     """hashlib-compatible wrapper for Blake3 using official blake3 library.
 
-    BLAKE3 is a cryptographic hash function that is much faster than MD5, SHA-1, SHA-2,
-    and SHA-3, yet is just as secure as the latest standard SHA-3.
+    BLAKE3 supports variable-length output up to 128 bytes (default 32).
 
     Example:
         >>> from multihash import digest
@@ -268,28 +541,32 @@ class Blake3Hash:
         '...'
     """
 
+    MAX_SIZE = 128
     name: str = "blake3"
-    digest_size: int = 32
     block_size: int = 64
 
-    def __init__(self) -> None:
+    def __init__(self, length: int = 32) -> None:
+        if length <= 0 or length > self.MAX_SIZE:
+            raise ValueError(f"blake3 length must be 1..{self.MAX_SIZE}, got {length}")
         self._hasher = blake3.blake3()
+        self._length = length
+        self.digest_size = length
 
     def update(self, data: bytes) -> None:
         """Update the hash with data."""
         self._hasher.update(data)
 
     def digest(self) -> bytes:
-        """Return digest."""
-        return self._hasher.digest()
+        """Return digest of the configured length."""
+        return self._hasher.digest(self._length)
 
     def hexdigest(self) -> str:
         """Return hex digest."""
-        return self._hasher.hexdigest()
+        return self.digest().hex()
 
     def copy(self) -> "Blake3Hash":
         """Create a copy of the hash state."""
-        c = Blake3Hash()
+        c = Blake3Hash(self._length)
         c._hasher = self._hasher.copy()
         return c
 
@@ -543,6 +820,8 @@ class FuncReg(metaclass=_FuncRegMeta):
     _func_from_name: ClassVar[dict] = {}
     _func_from_hash: ClassVar[dict] = {}
     _func_hash: ClassVar[dict] = {}
+    default_lengths: ClassVar[dict[int, int]] = {}
+    _variable_factories: ClassVar[dict[int, Callable]] = {}
 
     # Standard hash function data: (func, hashlib_name, constructor)
     _std_func_data: ClassVar[list] = [
@@ -554,8 +833,7 @@ class FuncReg(metaclass=_FuncRegMeta):
         (Func.sha3_384, "sha3_384", hashlib.sha3_384),
         (Func.sha3_256, "sha3_256", hashlib.sha3_256),
         (Func.sha3_224, "sha3_224", hashlib.sha3_224),
-        (Func.shake_128, "shake_128", None),  # Variable length - use ShakeHash wrapper
-        (Func.shake_256, "shake_256", None),  # Variable length - use ShakeHash wrapper
+        # SHAKE registered via register_variable_size in reset()
         (Func.blake2b_256, "blake2b", lambda: hashlib.blake2b(digest_size=32)),
         (Func.blake2b_512, "blake2b", lambda: hashlib.blake2b(digest_size=64)),
         (Func.blake2s_256, "blake2s", lambda: hashlib.blake2s(digest_size=32)),
@@ -570,8 +848,12 @@ class FuncReg(metaclass=_FuncRegMeta):
         # SHA2-512 truncated variants (Python 3.6+)
         (Func.sha2_512_224, "sha512_224", getattr(hashlib, "sha512_224", None)),
         (Func.sha2_512_256, "sha512_256", getattr(hashlib, "sha512_256", None)),
-        # Blake3 (using official blake3 library)
-        (Func.blake3, "blake3", Blake3Hash),
+        # Blake3 registered via register_variable_size in reset()
+        # Legacy Keccak (distinct from NIST SHA3) — requires pycryptodome
+        (Func.keccak_224, "keccak-224", _create_keccak_hash(224)),
+        (Func.keccak_256, "keccak-256", _create_keccak_hash(256)),
+        (Func.keccak_384, "keccak-384", _create_keccak_hash(384)),
+        (Func.keccak_512, "keccak-512", _create_keccak_hash(512)),
         # Murmur3 variants (using official mmh3 library)
         (Func.murmur3_128, "murmur3-128", Murmur3_128Hash),
         (Func.murmur3_32, "murmur3-32", Murmur3_32Hash),
@@ -628,6 +910,8 @@ class FuncReg(metaclass=_FuncRegMeta):
         cls._func_from_name = {}
         cls._func_from_hash = {}
         cls._func_hash = {}
+        cls.default_lengths = {}
+        cls._variable_factories = {}
 
         for func, hash_name, hash_new in cls._std_func_data:
             cls._do_register(func, func.name, hash_name, hash_new)
@@ -656,6 +940,30 @@ class FuncReg(metaclass=_FuncRegMeta):
                 # Variant not available, skip
                 pass
 
+        # Variable-size SHAKE functions
+        def shake_128_factory(size_hint: int):
+            length = 32 if size_hint < 0 else size_hint
+            if length <= 0:
+                return None
+            return ShakeHash(hashlib.shake_128, length)
+
+        def shake_256_factory(size_hint: int):
+            length = 64 if size_hint < 0 else size_hint
+            if length <= 0:
+                return None
+            return ShakeHash(hashlib.shake_256, length)
+
+        cls.register_variable_size(Func.shake_128, "shake_128", shake_128_factory, "shake_128")
+        cls.register_variable_size(Func.shake_256, "shake_256", shake_256_factory, "shake_256")
+
+        def blake3_factory(size_hint: int):
+            length = 32 if size_hint < 0 else size_hint
+            if length <= 0 or length > Blake3Hash.MAX_SIZE:
+                return None
+            return Blake3Hash(length)
+
+        cls.register_variable_size(Func.blake3, "blake3", blake3_factory, "blake3")
+
     @classmethod
     def get(cls, func_hint: Func | str | int) -> Func | int:
         """Return a registered hash function matching the given hint."""
@@ -683,6 +991,44 @@ class FuncReg(metaclass=_FuncRegMeta):
         if hash_name:
             cls._func_from_hash[hash_name] = code
         cls._func_hash[code] = cls._hash(hash_name, hash_new)
+        if hash_new is not None and int(code) not in cls._variable_factories:
+            try:
+                cls.default_lengths[int(code)] = hash_new().digest_size
+            except (AttributeError, TypeError, ValueError):
+                pass
+
+    @classmethod
+    def register_variable_size(
+        cls,
+        code: int,
+        name: str,
+        factory: Callable[[int], Any],
+        hash_name: str | None = None,
+    ) -> None:
+        """Register a variable-size hash function factory.
+
+        The factory receives a size hint in bytes. Pass ``-1`` to request the
+        default output length. The factory should return a hashlib-compatible
+        object, or ``None`` if the requested size is invalid.
+
+        Args:
+            code: Multihash function code
+            name: Function name (hyphen or underscore form)
+            factory: Callable ``(size_hint: int) -> hash_obj | None``
+            hash_name: Optional hashlib-style name for reverse lookup
+        """
+        code = int(code)
+        default_hasher = factory(-1)
+        if default_hasher is None:
+            raise ValueError(f"variable-size factory for {name} rejected default size hint -1")
+        cls._variable_factories[code] = factory
+        cls.default_lengths[code] = default_hasher.digest_size
+        cls._do_register(code, name, hash_name or name, None)
+
+    @classmethod
+    def is_variable_size(cls, func: Func | int) -> bool:
+        """Return True if ``func`` was registered via :meth:`register_variable_size`."""
+        return int(func) in cls._variable_factories
 
     @classmethod
     def register(cls, code: int, name: str, hash_name: str | None = None, hash_new=None) -> None:
@@ -735,6 +1081,8 @@ class FuncReg(metaclass=_FuncRegMeta):
         hash_data = cls._func_hash.pop(code)
         if hash_data.name:
             del cls._func_from_hash[hash_data.name]
+        cls.default_lengths.pop(code, None)
+        cls._variable_factories.pop(code, None)
 
     @classmethod
     def func_from_hash(cls, hash_obj) -> Func | int:
@@ -760,27 +1108,25 @@ class FuncReg(metaclass=_FuncRegMeta):
 
         Args:
             func: Hash function code or Func enum
-            length: Optional length for SHAKE hashes. Required for SHAKE. Returns None if None for SHAKE.
+            length: Optional output length for variable-size hashes
 
         Returns:
             Hash object or None if not available
 
         Note:
-            SHAKE functions (shake_128, shake_256) require a length parameter
-            to specify the output digest size. If length is None for SHAKE
-            functions, this method returns None.
+            For variable-size functions, ``None`` returns ``None`` (caller must
+            supply a length or use ``-1`` for the default). ``-1`` requests the
+            default length from :attr:`default_lengths`.
         """
+        code = int(func)
+        if code in cls._variable_factories:
+            if length is None:
+                return None
+            size_hint = -1 if length == -1 else length
+            return cls._variable_factories[code](size_hint)
+
         new = cls._func_hash[func].new
         if new is None:
-            # Handle SHAKE functions with variable length
-            if func == Func.shake_128:
-                if length is None:
-                    return None
-                return ShakeHash(hashlib.shake_128, length)
-            elif func == Func.shake_256:
-                if length is None:
-                    return None
-                return ShakeHash(hashlib.shake_256, length)
             return None
         return new()
 

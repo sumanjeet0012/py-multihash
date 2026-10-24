@@ -33,13 +33,18 @@ Homepage = "https://github.com/multiformats/multihash"
 Download = "https://github.com/multiformats/multihash/tarball/3.0.0"
 
 [project.optional-dependencies]
+keccak = [
+    "pycryptodome>=3.0,<4.0",
+]
 dev = [
     "Sphinx>=5.0.0",
     "build>=0.9.0",
     "bump-my-version>=1.2.0",
     "mypy",
     "pre-commit",
+    "pycryptodome>=3.0,<4.0",
     "pytest",
+    "pytest-benchmark",
     "pytest-cov",
     "pytest-runner",
     "ruff",
@@ -61,6 +66,10 @@ include = ["multihash*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_classes = "*TestCase"
+addopts = "-m 'not benchmark'"
+markers = [
+    "benchmark: performance benchmarks (excluded from default test runs)",
+]
 
 [tool.towncrier]
 # Read https://github.com/multiformats/py-multihash/blob/master/newsfragments/README.md for instructions
@@ -153,6 +162,11 @@ replace = "__version__ = \"{new_version}\""
 filename = "pyproject.toml"
 search = "Download = \"https://github.com/multiformats/multihash/tarball/{current_version}\""
 replace = "Download = \"https://github.com/multiformats/multihash/tarball/{new_version}\""
+
+[[tool.bumpversion.files]]
+filename = "version.json"
+search = "\"version\": \"v{current_version}\""
+replace = "\"version\": \"v{new_version}\""
 
 [tool.mypy]
 python_version = "3.10"
