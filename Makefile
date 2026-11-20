@@ -20,7 +20,7 @@ help:
 	@echo "setup - install development requirements"
 	@echo "fix - fix formatting & linting issues with ruff"
 	@echo "lint - run pre-commit hooks on all files"
-	@echo "typecheck - run mypy type checking"
+	@echo "typecheck - run mypy and pyrefly type checking"
 	@echo "test - run tests quickly with the default Python"
 	@echo "docs-ci - generate docs for CI"
 	@echo "docs - generate docs and open in browser"
@@ -56,10 +56,10 @@ lint:
 	pre-commit run --all-files
 
 fix:
-	python -m ruff check --fix
+	python -m ruff check --fix --exclude spec
 
 typecheck:
-	pre-commit run mypy-local --all-files
+	pre-commit run mypy-local --all-files && pre-commit run pyrefly-local --all-files
 
 test:
 	python -m pytest tests
